@@ -1,139 +1,75 @@
-; multiplicacao de matrizes
+.data
+    ; Matriz A (2x2) armazenada columnwise:
+    ; A = [ 1  3
+    ;       2  4 ]
+A:      .word32 1, 2
+        .word32 3, 4
 
-        .data
-; Ordem da matriz (mude este valor para 1..4)
-N:      .word32 4
+    ; Matriz B (2x2) armazenada columnwise:
+B:      .word32 5, 6
+        .word32 7, 8
 
-; Matrizes A e B armazenadas COLUMNWISE (coluna por coluna).
-; Ex.: coluna 0 inteira, depois coluna 1, etc.
-; A (4x4) exemplo
-A:      .word32 1,5,9, 13    ; coluna 0: A(0,0),A(1,0),A(2,0),A(3,0)
-        .word32 2,6,10,14    ; coluna 1
-        .word32 3,7,11,15    ; coluna 2
-        .word32 4,8,12,16    ; coluna 3
+    ; strings e bloco de parametros para syscall 5
+fmt_res:    .asciiz "resultado [%i %i]\n"
+params5:    .space 12    ; [ptr_format (4)][int1 (4)][int2 (4)]
 
-; B (4x4) exemplo
-B:      .word32 1, 2, 3, 4
-        .word32 5, 6, 7, 8
-        .word32 9, 10,11,12
-        .word32 13,14,15,16
-
-; Espaço para resultado C (inicializado com zeros), também columnwise
-C:      .word32 0:16
-
-; strings para impressao (se desejar um separador entre números)
-newline: .asciiz "\n"
-space:   .asciiz " "
-
-        .text
-        .globl main
+.text
+.globl main
 main:
-; ------------------------------------------------------------
-; Prologue / Convenção: carregar bases e N em registradores $s*
-; s0 = &A, s1 = &B, s2 = &C, s3 = N
-; s4 = i (row index), s5 = j (col index), s6 = k (inner)
-; t-registers usados para temporários
-; ------------------------------------------------------------
-        la      $s0, A          ; base A
-        la      $s1, B          ; base B
-        la      $s2, C          ; base C
-        lw      $s3, N          ; N
+    ; carregar A(0,0) e A(0,1) diretamente em a0,a2
+    lui     $t0, %hi(A)
+    addi    $t0, $t0, %lo(A)
+    lw      $a0, 0($t0)      ; A(0,0)
+    lw      $a2, 8($t0)      ; A(0,1)  (offset 2 words = 8 bytes)
 
-        ; precomputar strideA = 4 * N (bytes to advance A pointer when k++)
-        sll     $t8, $s3, 2     ; t8 = 4 * N
+    ; carregar B(0,0) e B(0,1) diretamente em a1,a3
+    lui     $t1, %hi(B)
+    addi    $t1, $t1, %lo(B)
+    lw      $a1, 0($t1)      ; B(0,0)
+    lw      $a3, 8($t1)      ; B(0,1)
 
-        li      $s4, 0          ; i = 0 (row)
-outer_i:
-        li      $s5, 0          # j = 0 (col)
-outer_j:
-        # --- Preparação para calcular C(i,j) ---
-        # t3 = i * 4  (offset for row within a column)
-        sll     $t3, $s4, 2
+    ; chamar funcao que calcula os dois produtos (a0*a1, a2*a3)
+    jal     prod_esc
 
-        # A_ptr = A_base + i*4   (points to A(i, k=0))
-        add     $t1, $s0, $t3
+    ; resultado: v0 = produto1, v1 = produto2
+    ; montar bloco params5: [ptr_format][produto1][produto2]
+    lui     $t2, %hi(fmt_res)
+    addi    $t2, $t2, %lo(fmt_res)
+    lui     $t3, %hi(params5)
+    addi    $t3, $t3, %lo(params5)
 
-        # B_ptr = B_base + (j * N)*4  => compute j*N then *4
-        mul     $t4, $s5, $s3    # t4 = j * N
-        sll     $t4, $t4, 2      # t4 = 4 * j * N
-        add     $t2, $s1, $t4    # t2 = &B(0,j)
+    sw      $t2, 0($t3)      ; params5[0] = &fmt_res
+    sw      $v0, 4($t3)      ; params5[1] = produto1
+    sw      $v1, 8($t3)      ; params5[2] = produto2
 
-        # accumulator = 0
-        li      $t0, 0
+    ; chamar syscall 5 (print formatted) passando &params5 em a0
+    move    $a0, $t3
+    li      $v0, 5
+    syscall
 
-        # k = 0
-        li      $s6, 0
-inner_k:
-        # load A(i,k)  -> at t1
-        lw      $t5, 0($t1)
-        # load B(k,j)  -> at t2
-        lw      $t6, 0($t2)
-        # multiply and accumulate
-        mul     $t7, $t5, $t6
-        add     $t0, $t0, $t7
+    ; exit via syscall 0
+    li      $v0, 0
+    syscall
 
-        # advance pointers for next k:
-        # A_ptr += 4*N  (go to next column, same row)
-        add     $t1, $t1, $t8
-        # B_ptr += 4    (next row inside same column)
-        addi    $t2, $t2, 4
+; --------------------------------------------------
+; prod_esc: argumentos: a0,a1,a2,a3
+; retorna: v0 = a0*a1, v1 = a2*a3
+; preserva $s0 (exemplo de convenção)
+; --------------------------------------------------
+prod_esc:
+    addi    $sp, $sp, -8
+    sw      $s0, 4($sp)
+    sw      $ra, 0($sp)
 
-        addi    $s6, $s6, 1
-        blt     $s6, $s3, inner_k
+    mult    $a0, $a1
+    mflo    $t0
+    mult    $a2, $a3
+    mflo    $t1
 
-        # --- armazenar resultado C(i,j)
-        # compute offset: (j * N + i) * 4
-        mul     $t4, $s5, $s3    # t4 = j * N
-        add     $t4, $t4, $s4    # t4 = j*N + i
-        sll     $t4, $t4, 2      # bytes offset
-        add     $t9, $s2, $t4    # t9 = &C(i,j)
-        sw      $t0, 0($t9)
+    move    $v0, $t0
+    move    $v1, $t1
 
-        # próxima coluna j++
-        addi    $s5, $s5, 1
-        blt     $s5, $s3, outer_j
-
-        # próxima linha i++
-        addi    $s4, $s4, 1
-        blt     $s4, $s3, outer_i
-
-        # -------------------------------------------------
-        # Impressão da matriz C em ordem ocidental:
-        # Percorre linhas 0..N-1 e colunas 0..N-1 e carrega C(i,j)
-        # lembrando armazenamento columnwise (endereço = base + 4*(j*N + i))
-        # -------------------------------------------------
-        li      $s4, 0          # i = 0
-print_row:
-        li      $s5, 0          # j = 0
-print_col:
-        # compute addr = C + 4*(j*N + i)
-        mul     $t4, $s5, $s3
-        add     $t4, $t4, $s4
-        sll     $t4, $t4, 2
-        add     $t9, $s2, $t4
-        lw      $t0, 0($t9)
-
-        # print integer (syscall)
-        move    $a0, $t0
-        li      $v0, 1
-        syscall
-
-        # print space
-        la      $a0, space
-        li      $v0, 4
-        syscall
-
-        addi    $s5, $s5, 1
-        blt     $s5, $s3, print_col
-
-        # print newline
-        la      $a0, newline
-        li      $v0, 4
-        syscall
-
-        addi    $s4, $s4, 1
-        blt     $s4, $s3, print_row
-
-        # exit
-        li      $v0, 10
-        syscall
+    lw      $ra, 0($sp)
+    lw      $s0, 4($sp)
+    addi    $sp, $sp, 8
+    jr      $ra
