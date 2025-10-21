@@ -1,0 +1,21 @@
+.data
+
+; aqui eh uma constante
+format_str: .asciiz "Ola %s"
+world:      .asciiz "Mundo"
+
+; aqui sao reservas de espacos contiguos na memoria
+param_format:    .space 8
+param_result:    .space 8
+
+.code
+
+daddi $t0, $zero, format_str
+sw    $t0, param_format($zero)
+
+daddi $t1, $zero, world
+sw    $t1, param_result($zero)
+
+daddi $t6, $zero, param_format
+syscall 5
+syscall 0

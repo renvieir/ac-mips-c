@@ -1,0 +1,28 @@
+.data
+
+; aqui eh uma constante
+format_str: .asciiz "O resultado eh %i"
+
+; aqui sao reservas de espacos contiguos na memoria
+param_str:    .space 8
+param_result: .space 8
+
+.code
+
+addi $s0, $zero, 2  ; $s0 = 2
+addi $s0, $s0, 3    ; $s0 = 2 + 3 = 5 (usando o valor anterior de $s0 como base)
+
+; armazena o valor armazenado em $s0 no inicio do spaço definido com o label param_result
+sw $s0, param_result($zero)
+
+; carrega o endereço de format_str pro registrador $t0
+daddi $t0, $zero, format_str
+; salva o valor armazenado em $t0 no inicio do espaço definido com o label param_str
+sw $t0, param_str($zero)
+
+; carrega o endereço de param_str pra $t6
+daddi $t6, $zero, param_str
+
+syscall 5
+
+syscall 0

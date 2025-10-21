@@ -1,0 +1,59 @@
+    .data
+
+fstr:   .asciiz "O resultado da %s eh %i\n"
+soma:   .asciiz "soma"
+sub:    .asciiz "subtracao"
+multi:  .asciiz "multiplicacao"
+divi:   .asciiz "divisao"
+
+
+pstr:  .space 8
+pop:   .space 8
+pres:  .space 8
+
+
+    .text
+
+; prepara para impressao
+daddi $t4, $zero, fstr
+sw    $t4, pstr($zero)
+daddi $t6, $zero, pstr
+
+; 5 + 1
+daddi $a0, $zero, soma
+addi  $a1, $zero, 5
+addi  $a1, $a1, 1
+jal imprime
+
+; 7 - 4
+daddi $a0, $zero, sub
+addi  $a1, $zero, 7
+addi  $a1, $a1, -4
+jal imprime
+
+; 3 x 3
+daddi $a0, $zero, multi
+addi  $t1, $zero, 3
+dmult $t1, $t1
+mflo  $a1
+
+jal imprime
+
+; 9 / 2
+daddi $a0, $zero, divi
+addi  $t1, $zero, 9
+addi  $t2, $zero, 2
+ddiv $t1, $t2
+mflo  $a1
+jal imprime
+
+syscall 0
+
+imprime:
+; imprime a operacao armazenada em a0 e o resultado armazenado em a1
+sw  $a0, pop($zero)
+sw  $a1, pres($zero)
+
+syscall 5
+jr $ra
+

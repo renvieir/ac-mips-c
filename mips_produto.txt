@@ -1,0 +1,51 @@
+    .data
+
+fstr:   .asciiz "O resultado eh %i\n"
+
+pstr:  .space 8
+pres:  .space 8
+
+; serao parametros para funcao de produto escalar
+row_a:  .space 16
+col_b:  .space 16
+
+    .code
+
+; prepara para impressao logo no começo para nao repetir codigo na funcao
+daddi $t9, $zero, fstr
+sw    $t9, pstr($zero)
+daddi $t6, $zero, pstr
+
+main:
+daddi $a0, $zero, 1
+daddi $a1, $zero, 2
+daddi $a2, $zero, 3
+daddi $a3, $zero, 4
+
+; calcula produto, resultadod deve ser 1*3 + 2*4 = 11
+jal prod_esc
+
+; poe o resultado pra imprimir
+add $a0, $zero, $v0
+
+jal imprime
+
+syscall 0
+
+
+prod_esc:
+dmult $a0, $a2
+mflo  $t0
+
+dmult $a1, $a3
+mflo  $t1
+
+add   $v0, $t0, $t1
+jr $ra
+
+
+imprime:
+; imprime o resultado armazenado em a0
+sw  $a0, pres($zero)
+syscall 5
+jr $ra
