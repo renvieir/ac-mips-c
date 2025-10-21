@@ -269,3 +269,562 @@ Se quiser, posso:
 - ajustar as matrizes exemplo para os valores do "exemplo 2" se você colar aqui,
 - gerar uma versão com minimização de hazards (reordenando instruções),
 - ou detalhar passo-a-passo a contagem de cada instrução e cada hazard para apresentar no relatório.
+
+renvieir: me de um exemplo de definicao de dados de uma matriz 2x2
+
+GitHub Copilot: GitHub Copilot
+
+Exemplo curto (armazenamento columnwise, 2x2):
+
+````asm
+asm
+        .data
+; ordem
+N:      .word32 2
+
+; Matriz A (2x2) armazenada columnwise:
+; A = [ 1  3
+;       2  4 ]
+; coluna 0: 1,2  ; coluna 1: 3,4
+A:      .word32 1, 2
+        .word32 3, 4
+
+; Matriz B (exemplo)
+B:      .word32 5, 6
+        .word32 7, 8
+
+; Resultado C (reservar 4 words, columnwise)
+C:      .word32 0:4
+````
+
+
+renvieir: explique a parte de .data
+
+GitHub Copilot: GitHub Copilot
+
+Segue explicação curta e objetiva da seção .data do arquivo enviado.
+
+- .data
+  - inicia a área de dados (segmento onde ficam constantes e variáveis estáticas).
+
+- N: .word32 4
+  - armazena a ordem N da matriz (aqui N = 4). O código lê esse word com lw para saber a dimensão.
+
+- Matrizes A e B (columnwise)
+  - As diretivas .word32 definem words de 32 bits em memória.
+  - Estão armazenadas columnwise (cada coluna inteira seguida da próxima coluna).
+    - Ex.: A: .word32 1,5,9,13  → coluna 0 contém A(0,0)=1, A(1,0)=5, A(2,0)=9, A(3,0)=13.
+    - Em geral, para índices 0-based, o elemento A(i,j) está em endereço A + 4*(j*N + i).
+  - Essa organização obriga a acessar A avançando por stride de 4*N bytes para passar à próxima coluna (como o código faz).
+
+- C: .word32 0:16
+  - reserva e inicializa 16 words com zero (espaço para a matriz resultado 4x4), também columnwise.
+  - sintaxe 0:16 → 16 repetições do valor 0.
+
+- newline: .asciiz "\n" e space: .asciiz " "
+  - strings null-terminated usadas para imprimir quebras de linha e separadores; .asciiz define bytes terminados em 0.
+
+Observações práticas
+- Para N=2, ajuste N:.word32 2 e defina apenas 2 words por coluna (total 4 words por matriz).
+- O mapeamento columnwise é crucial: ao indexar C(i,j) o código calcula offset = 4*(j*N + i) antes de lw/sw.
+
+renvieir: crie o codigo pra calcular o produto escalar das matrizes A e B, apenas uma iteracao, nao precisa ser a matriz , apenas quero fazer
+1x5 + 3x7
+
+
+GitHub Copilot: ````asm
+// ...existing code...
+        .data
+
+; Matriz A (2x2) armazenada columnwise:
+; A = [ 1  3
+;       2  4 ]
+; coluna 0: 1,2  ; coluna 1: 3,4
+
+A:      .word32 1, 2
+        .word32 3, 4
+
+; Matriz B (exemplo)
+B:      .word32 5, 6
+        .word32 7, 8
+
+        .text
+        .globl main
+
+# Calcula apenas uma iteracao do produto escalar:
+# 1*5 + 3*7 = 5 + 21 = 26
+main:
+        # carregar A(0,0) = 1  e A(0,1) = 3
+        la      $t0, A
+        lw      $t1, 0($t0)      # t1 = 1   (A coluna0, linha0)
+        lw      $t2, 8($t0)      # t2 = 3   (A coluna1, linha0) -> offset 2 words = 8 bytes
+
+        # carregar B(0,0) = 5  e B(0,1) = 7
+        la      $t3, B
+        lw      $t4, 0($t3)      # t4 = 5   (B coluna0, linha0)
+        lw      $t5, 8($t3)      # t5 = 7   (B coluna1, linha0)
+
+        # multiplicacoes e soma
+        mul     $t6, $t1, $t4    # t6 = 1 * 5
+        mul     $t7, $t2, $t5    # t7 = 3 * 7
+        add     $t8, $t6, $t7    # t8 = t6 + t7 = resultado
+
+        # imprimir resultado inteiro
+        move    $a0, $t8
+        li      $v0, 1
+        syscall
+
+        # imprimir newline
+        la      $a0, newline
+        li      $v0, 4
+        syscall
+
+        # exit
+        li      $v0, 10
+        syscall
+// ...existing code...
+````
+
+renvieir: vc deveria usar a funcao produto_escalar ao inves de fazer a multiplicacao e soma
+
+GitHub Copilot: GitHub Copilot
+
+Segue a alteração: chama a função produto_escalar passando A(0,0), B(0,0), A(0,1), B(0,1) em $a0..$a3, usa jal e imprime $v0. Apenas inseri um label main e o chamado à função; resto do arquivo permanece.
+
+````asm
+// ...existing code...
+        .data
+
+; Matriz A (2x2) armazenada columnwise:
+; A = [ 1  3
+;       2  4 ]
+; coluna 0: 1,2  ; coluna 1: 3,4
+
+A:      .word32 1, 2
+        .word32 3, 4
+
+; Matriz B (exemplo)
+B:      .word32 5, 6
+        .word32 7, 8
+
+newline: .asciiz "\n"
+
+        .text
+        .globl main
+main:
+    # carregar A(0,0) = 1  e A(0,1) = 3
+    la      $t0, A
+    lw      $t1, 0($t0)      # t1 = 1   (A coluna0, linha0)
+    lw      $t2, 8($t0)      # t2 = 3   (A coluna1, linha0)
+
+    # carregar B(0,0) = 5  e B(0,1) = 7
+    la      $t3, B
+    lw      $t4, 0($t3)      # t4 = 5   (B coluna0, linha0)
+    lw      $t5, 8($t3)      # t5 = 7   (B coluna1, linha0)
+
+    # preparar argumentos para produto_escalar: a0=1, a1=5, a2=3, a3=7
+    move    $a0, $t1
+    move    $a1, $t4
+    move    $a2, $t2
+    move    $a3, $t5
+
+    jal     produto_escalar
+
+    # imprimir resultado em $v0
+    move    $a0, $v0
+    li      $v0, 1
+    syscall
+
+    # newline
+    la      $a0, newline
+    li      $v0, 4
+    syscall
+
+    li      $v0, 10
+    syscall
+
+produto_escalar:            ; label para chamar a funcao
+    addi    $sp, $sp, -4    ; avança o stack poiner
+    sw      $s0, 0($sp)     ; empilha o valor de $s0
+
+    mult    $t0, $a0, $a1   ; $t0 = g*h
+    mult    $t1, $a2, $a3   ; $t1 = i*j
+    add     $s0, $t0, $t1   ; f   = $t0 + $t1
+
+    add     $v0, $s0, $zero ; coloca resultado em $v0
+
+    lw         $s0, 0($sp)  ; restaura $s0
+    addi    $sp, $sp, 4
+    jr      $ra
+// ...existing code...
+
+
+renvieir: explique o codigo
+ la      $t3, B
+
+GitHub Copilot: GitHub Copilot
+
+la $t3, B — Explicação curta:
+
+- "la" (load address) carrega no registrador $t3 o endereço (ponteiro) do rótulo B definido em .data.
+- Não carrega o conteúdo do dado, só o endereço base da matriz B.
+- Esse endereço é usado depois como base em instruções de memória (por exemplo lw $t4, 0($t3) para ler B(0,0) e lw $t5, 8($t3) para ler o elemento deslocado).
+- Observação: la é uma pseudo-instrução do assembler — pode ser expandida em instruções reais (lui/addi) pelo assembler.
+
+renvieir: ao inves de fazer
+```
+lw      $t1, 0($t0)      ; t1 = 1   (A coluna0, linha0)
+lw      $t2, 8($t0)      ; t2 = 3   (A coluna1, linha0) -> offset 2 words = 8 bytes
+...
+move    $a0, $t1
+move    $a1, $t4
+```
+
+nao era melhor fazer ?
+```
+lw      $a0, 0($t0)      ; t1 = 1   (A coluna0, linha0)
+lw      $a1, 8($t0)      ; t2 = 3   (A coluna1, linha0) -> offset 2 words = 8 bytes
+```
+
+
+GitHub Copilot: Sim — é melhor: economiza instruções e evita movs desnecessários. Como os registradores $a0..$a3 são justamente para argumentos (caller-saved), é perfeitamente válido carregar os operandos diretamente neles desde que você não precise dos valores em outros lugares antes do jal.
+
+Substitua a seção de carregamento por isto:
+
+````asm
+// ...existing code...
+    la      $t0, A
+    lw      $a0, 0($t0)      # A(0,0) -> a0
+    lw      $a2, 8($t0)      # A(0,1) -> a2
+
+    la      $t3, B
+    lw      $a1, 0($t3)      # B(0,0) -> a1
+    lw      $a3, 8($t3)      # B(0,1) -> a3
+
+    jal     produto_escalar
+// ...existing code...
+````
+
+Observações rápidas:
+- Mantém a convenção de chamadas (args em $a0..$a3).
+- Reduz o número de instruções (evita moves).
+- Não use essa técnica se precisar dos valores em outros pontos antes da chamada ou se precisar preservá‑los após a chamada (a regs não são preservados pelo callee).
+
+renvieir: Explique esse codigo
+
+```
+    jal     produto_escalar
+
+    # imprimir resultado em $v0
+    move    $a0, $v0
+```
+
+GitHub Copilot: GitHub Copilot
+
+- `jal produto_escalar`
+  - "Jump And Link": salva o endereço de retorno em `$ra` e pula para o rótulo `produto_escalar`.
+  - passa o controle para a função; os argumentos devem estar em `$a0..$a3` antes do `jal`.
+  - espera-se que a função retorne usando `jr $ra`.
+
+- após o retorno, `produto_escalar` coloca o resultado em `$v0` (convenção MIPS).
+- `move $a0, $v0`
+  - copia o valor retornado (`$v0`) para `$a0`, preparando o argumento para a syscall de impressão (o inteiro a ser impresso deve estar em `$a0`).
+  - atenção: apenas `move` não imprime nada. Para imprimir é preciso:
+    1) carregar o código da syscall em `$v0` (por exemplo `li $v0, 1` para imprimir inteiro),
+    2) executar `syscall`.
+
+Observação breve sobre convenções:
+- `$a0..$a3` são registradores de argumento (caller-saved).
+- `$v0` é usado para valor de retorno; `$ra` guarda o endereço de retorno.
+
+renvieir: o programa edumips64 esta reclamando de que o comando la nao existe
+
+GitHub Copilot: GitHub Copilot
+
+Correto — em alguns montadores (incluindo EduMIPS64) a pseudo-instrução `la` não está disponível. Substitua por carregamento da parte alta e baixa do endereço. Exemplo (modifique as duas ocorrências de `la` no seu arquivo):
+
+````asm
+// ...existing code...
+    # substituir: la $t0, A
+    lui     $t0, %hi(A)       # carrega parte alta do endereço de A
+    addi    $t0, $t0, %lo(A)  # soma parte baixa -> $t0 = &A
+
+    lw      $a0, 0($t0)
+    lw      $a1, 8($t0)
+
+    # substituir: la $t3, B
+    lui     $t3, %hi(B)
+    addi    $t3, $t3, %lo(B)
+
+    lw      $a2, 0($t3)
+    lw      $a3, 8($t3)
+// ...existing code...
+````
+
+Notas rápidas:
+- `%hi()` e `%lo()` são placeholders típicos do montador que resolvem o endereço do rótulo.
+- Se o seu montador reclamar de `%hi`/`%lo`, tente `lui` seguido de `addi` com os valores gerados pelo montador ou use a diretiva de pseudo-instrução equivalente documentada no EduMIPS64.
+
+renvieir: O que esse codigo de impressao faz?
+
+GitHub Copilot: GitHub Copilot
+
+Explicação curta e objetiva do trecho:
+
+- .data
+  - format_str = "%s %i\n" (string de formato)
+  - str = "EduMIPS eh" (string a imprimir)
+  - int = .byte 10 (valor inteiro 10 como byte)
+  - params_sys5/.space: espaços reservados para montar o bloco de parâmetros do syscall 5
+
+- Montagem dos parâmetros (no .code)
+  - daddi $a1, $zero, format_str → coloca endereço do format_str em $a1
+  - sw   $a1, params_sys5($zero) → grava esse ponteiro no primeiro campo do bloco params_sys5
+  - daddi $a2, $zero, str → coloca endereço da string em $a2
+  - sw   $a2, param_str($zero) → grava ponteiro da string no bloco
+  - lb   $a3, int($zero) → carrega o byte com valor 10 em $a3
+  - sw   $a3, param_int($zero) → grava o inteiro (como word) no bloco de parâmetros
+  - daddi $t6, $zero, params_sys5 → $t6 recebe o endereço do bloco de parâmetros
+
+- syscall 5
+  - chama a rotina de impressão formatada do EduMIPS64 que lê o bloco apontado por $t6, usa format_str e imprime os parâmetros.
+  - resultado impresso esperado: "EduMIPS eh 10\n"
+
+- syscall 0
+  - finaliza/exita o programa.
+
+Resumo: o código constrói um bloco de parâmetros (ponteiros + valor) e chama o syscall 5 para imprimir usando o formato "%s %i\n", produzindo a linha "EduMIPS eh 10".
+
+renvieir: usando esse codigo de impressao como exemplo, faça o codigo para imprimir o resultado da chamada da funcao produto escalar
+
+```
+jal     produto_escalar
+# TODO print result
+```
+
+GitHub Copilot: GitHub Copilot
+
+Substitua o TODO por código que monta o bloco de parâmetros e chama o syscall 5 (estilo do exemplo). Também acrescente o bloco params na seção .data. Código pronto para colar no seu arquivo:
+
+````asm
+// ...existing code...
+        .data
+newline: .asciiz "\n"
+space:   .asciiz " "
+saida:   .asciiz "resultado %i\n"
+
+; bloco de parâmetros para syscall 5 (format + um inteiro)
+params_sys5: .space 8      ; 2 words: [ptr_format][int_value]
+
+; ...existing data (A, B etc) ...
+A:      .word32 1, 2
+        .word32 3, 4
+B:      .word32 5, 6
+        .word32 7, 8
+
+        .text
+        .globl main
+main:
+; carregar A(0,0) = 1  e A(0,1) = 3
+lui     $t0, %hi(A)
+addi    $t0, $t0, %lo(A)
+lw      $a0, 0($t0)
+lw      $a1, 8($t0)
+
+; carregar B(0,0) = 5  e B(0,1) = 7
+lui     $t3, %hi(B)
+addi    $t3, $t3, %lo(B)
+lw      $a2, 0($t3)
+lw      $a3, 8($t3)
+
+jal     produto_escalar
+
+; -------------------------
+; imprimir resultado com syscall 5 (formato: "resultado %i\n")
+; monta bloco params_sys5 = [ &saida , resultado ]
+; -------------------------
+    ; endereço do formato (saida) em $t0
+    lui     $t0, %hi(saida)
+    addi    $t0, $t0, %lo(saida)
+    ; endereço do bloco params_sys5 em $t1
+    lui     $t1, %hi(params_sys5)
+    addi    $t1, $t1, %lo(params_sys5)
+
+    ; armazenar ptr do formato em params_sys5[0]
+    sw      $t0, 0($t1)
+
+    ; armazenar valor retornado (em $v0) em params_sys5[1]
+    sw      $v0, 4($t1)
+
+    ; passar endereço do bloco em $a0 e chamar syscall 5
+    move    $a0, $t1
+    li      $v0, 5
+    syscall
+
+    ; exit
+    li      $v0, 0
+    syscall
+
+; ...existing function...
+produto_escalar:
+    addi    $sp, $sp, -4
+    sw      $s0, 0($sp)
+
+    ; multiplicacoes e soma (usar mult/dmult conforme suporte)
+    mult    $t0, $a0, $a1
+    mflo    $t0
+    mult    $t1, $a2, $a3
+    mflo    $t1
+    add     $s0, $t0, $t1
+
+    add     $v0, $s0, $zero
+
+    lw      $s0, 0($sp)
+    addi    $sp, $sp, 4
+    jr      $ra
+// ...existing code...
+````
+
+Notas rápidas:
+- O bloco params_sys5 contém o ponteiro para a string de formato e o inteiro; syscall 5 do EduMIPS64 vai ler esse bloco e imprimir conforme o formato.
+- Usei lui/addi (%hi/%lo) para carregar endereços (evita pseudo-instrução la).
+- Se seu montador exigir dword/word ou instruções de multiplicação diferentes (dmult/mult), ajuste conforme permitido pelo EduMIPS64.
+
+renvieir: ok agora com tudo que voce aprendeu ate aqui, escreva uma funcao para calcular o produto escalar chamada, prod_esc e imprima com a string "resultado [%i %i]"
+
+GitHub Copilot: Vou criar uma pequena lista de tarefas e depois escrever o arquivo produto_escalar.txt com a função `prod_esc` e o `main` que chama e imprime usando o formato pedido; o resultado será colocado em prod_esc.txt. I'll first write the todo list, then apply the file edit. 
+```
+
+
+Made changes.
+
+
+```
+Criei a função `prod_esc` e um `main` que carrega os valores, chama a função e imprime usando o formato solicitado.
+
+Checklist
+- [x] Implementar função `prod_esc` (recebe a0..a3, retorna v0/v1)
+- [x] Criar `main` e dados em `.data` (A, B columnwise, string e bloco de params)
+- [x] Usar `lui`/`addi` em vez de `la`
+
+Resumo do que foi escrito em produto_escalar.txt
+- .data:
+  - `N`, matrizes `A` e `B` armazenadas columnwise para exemplo 2x2.
+  - `fmt_res` = "resultado [%i %i]\n"
+  - `params5` espaço para montar os parâmetros para syscall 5.
+- main:
+  - Carrega A(0,0)→$a0, A(0,1)→$a2, B(0,0)→$a1, B(0,1)→$a3.
+  - Chama `jal prod_esc`.
+  - Monta `params5 = [&fmt_res, v0, v1]` e chama syscall 5 (código 5).
+  - Sai com syscall 0.
+- prod_esc:
+  - Empilha $s0 e $ra, calcula produtos com `mult`+`mflo`, retorna em $v0/$v1, restaura $ra/$s0 e retorna.
+
+Como testar no EduMIPS64
+- Abra produto_escalar.txt no EduMIPS64 e monte/exeute. O programa deve imprimir:
+  resultado [25 21]
+  (porque 1*5 = 5? — atenção: com os A/B definidos, produtos usados são 1*5=5 e 3*7=21 → imprime [5 21].)
+
+Se quiser, ajusto para imprimir apenas um número, usar outros elementos ou suportar N variável.
+
+renvieir: explique esse codigo? Ele pode ser melhorado?
+    lui     $t0, %hi(A)
+    addi    $t0, $t0, %lo(A)
+    lw      $a0, 0($t0)      # A(0,0)
+    lw      $a2, 8($t0)      # A(0,1)  (offset 2 words = 8 bytes)
+
+GitHub Copilot: GitHub Copilot
+
+Explicação curta:
+- lui $t0, %hi(A) / addi $t0, $t0, %lo(A)
+  - monta o endereço base do rótulo A em $t0 (parte alta + parte baixa).
+  - necessário porque EduMIPS64 não tem a pseudo-instrução la.
+- lw $a0, 0($t0)
+  - carrega A(0,0) diretamente em $a0 (primeiro elemento da coluna 0).
+- lw $a2, 8($t0)
+  - carrega A(0,1) em $a2. Offset 8 bytes = 2 words * 4 bytes porque matrizes estão columnwise:
+    - para 2x2, posição (i=0,j=1) → endereço = A + 4*(j*N + i) = A + 4*(1*2 + 0) = A + 8.
+
+Possíveis melhorias (concisas):
+- Evitar recalcular endereço para o segundo carregamento: incrementar o ponteiro e fazer lw em 0($t0) — gera código menor e mais claro.
+- Se o assembler suportar, usar pseudo-instrução la (mais legível). Em EduMIPS64 prefira a sequência lui/addi.
+- Confirmar que usar $a0/$a2/$a1/$a3 é OK: argumentos em $a* são caller-saved — está correto se você chamar a função em seguida.
+- Se fizer muitos acessos, calcule offsets com sll/mul para generalizar para N variável.
+
+Sugestão de alteração (substitui as 4 linhas por versão levemente otimizada):
+
+````asm
+// ...existing code...
+    lui     $t0, %hi(A)
+    addi    $t0, $t0, %lo(A)
+    lw      $a0, 0($t0)      # A(0,0)
+    addi    $t0, $t0, 8      # avança 2 words (próxima coluna, mesma linha)
+    lw      $a2, 0($t0)      # A(0,1)
+// ...existing code...
+````
+
+Isso mantém a mesma semântica, reduz instruções de cálculo de endereço e deixa o código um pouco mais claro.Isso mantém a mesma semântica, reduz instruções de cálculo de endereço e deixa o código um pouco mais claro.
+
+renvieir: eu poderia fazer 
+
+    lui     $a0, %hi(A)
+
+    ao inves de carregar tudo pra t0 e depois pra mover pra a0?
+
+GitHub Copilot: GitHub Copilot
+
+Sim — é possível carregar o endereço diretamente em $a0 e depois usar lw para colocar o valor em $a0, mas há trade‑offs.
+
+Exemplo direto (carrega endereço em $a0 e converte em valor):
+````asm
+    lui     $a0, %hi(A)
+    addi    $a0, $a0, %lo(A)
+    lw      $a0, 0($a0)      # agora $a0 contém A(0,0)
+    # para obter A(0,1) teria que reconstruir o endereço ou usar outro reg
+    lui     $t0, %hi(A)
+    addi    $t0, $t0, %lo(A)
+    lw      $a2, 8($t0)      # A(0,1) em $a2
+````
+
+Por que prefira a versão com um ponteiro temporário ($t0)
+- construção do endereço é feita só uma vez;
+- permite múltiplos carregamentos com offsets (menos instruções);
+- evita reconstruir o endereço ou perder o ponteiro.
+
+Versão recomendada (mais eficiente ao carregar vários elementos da mesma base):
+````asm
+    lui     $t0, %hi(A)
+    addi    $t0, $t0, %lo(A)
+    lw      $a0, 0($t0)      # A(0,0)
+    lw      $a2, 8($t0)      # A(0,1)
+````
+
+Resumo rápido
+- Carregar direto em $a0 é OK se só precisa de um elemento.
+- Se vai ler vários elementos da mesma base, usar um registrador temporário para a base (como $t0) é melhor.
+
+renvieir: talvez eu nao tenha entendido direito, o que o codigo faz mesmo? ele carrega os dados ou so o endereco de memoria?
+    lui     $t0, %hi(A)
+    addi    $t0, $t0, %lo(A)
+
+GitHub Copilot: GitHub Copilot
+
+Curto e direto:
+
+- As instruções
+  ```
+  lui     $t0, %hi(A)
+  addi    $t0, $t0, %lo(A)
+  ```
+  constroem no registrador $t0 o endereço (ponteiro) do rótulo A na seção .data. Ou seja: $t0 passa a conter o endereço de memória onde A começa — NÃO carregam o conteúdo dos dados.
+
+- Para obter o valor armazenado em memória (o dado) você precisa de uma instrução de acesso à memória, por exemplo:
+  ```
+  lw   $a0, 0($t0)   # agora carrega o word apontado por $t0 para $a0
+  ```
+  sem esse lw você só tem o endereço, não o valor.
+
+- Observações práticas:
+  - `lui/addi` é a forma usada quando o assembler não tem a pseudo-instrução `la`. `la $t0, A` faria o mesmo (mas o EduMIPS64 pode não suportar `la`).
+  - Se for ler vários elementos da mesma base, é eficiente manter o ponteiro em $t0 e fazer vários `lw offset($t0)`.
+  - Se você só precisa de um único elemento e quer economizar registos, pode montar o endereço direto em $a0 e fazer `lw $a0, 0($a0)` — mas aí perde o ponteiro para leituras adicionais.
