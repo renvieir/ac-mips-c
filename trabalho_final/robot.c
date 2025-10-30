@@ -372,12 +372,6 @@ HistoricoItem* treinar(RobotQLearning* robot, int* tamanho_historico) {
 
         // Decaimento do epsilon
         robot->epsilon = max_double(robot->epsilon_min, robot->epsilon * robot->taxa_decaimento);
-
-        // Exibe progresso a cada 500 episódios
-        if ((i + 1) % 500 == 0) {
-            printf("Episódio %d/%d - Passos: %d - Epsilon: %.4f\n",
-                   i + 1, robot->num_episodios, j + 1, robot->epsilon);
-        }
     }
 
     return historico;
@@ -410,6 +404,24 @@ void salvar_tabela_q_texto(RobotQLearning* robot, const char* nome_arquivo) {
     fprintf(f, "// epsilon_final = %.4f\n", robot->epsilon);
     fprintf(f, "// num_episodios = %d\n", robot->num_episodios);
     fprintf(f, "// passos_por_episodio = %d\n", robot->passos_por_episodio);
+    fprintf(f, "// dist_tolerancia = %.2f\n", robot->dist_tolerancia);
+    fprintf(f, "//\n");
+
+    // Discretização
+    fprintf(f, "// DISCRETIZAÇÃO:\n");
+    fprintf(f, "// faixas_x = [");
+    for (int i = 0; i < robot->num_estados_x; i++) {
+        fprintf(f, "%.4f", robot->faixas_x[i]);
+        if (i < robot->num_estados_x - 1) fprintf(f, ", ");
+    }
+    fprintf(f, "]\n");
+
+    fprintf(f, "// faixas_y = [");
+    for (int i = 0; i < robot->num_estados_y; i++) {
+        fprintf(f, "%.4f", robot->faixas_y[i]);
+        if (i < robot->num_estados_y - 1) fprintf(f, ", ");
+    }
+    fprintf(f, "]\n");
     fprintf(f, "//\n");
 
     // Início dos dados da tabela Q
@@ -438,7 +450,6 @@ void salvar_tabela_q_texto(RobotQLearning* robot, const char* nome_arquivo) {
             (valores_nao_zero * 100.0) / total_valores);
 
     fclose(f);
-    printf("Tabela Q salva em: %s\n", nome_arquivo);
 }
 
 // Testa a política aprendida sem exploração
