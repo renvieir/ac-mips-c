@@ -93,13 +93,14 @@ void destruir_robot(RobotQLearning* robot);
 void alocar_tabela_q(RobotQLearning* robot);
 void liberar_tabela_q(RobotQLearning* robot);
 
-// Funções auxiliares de matemática
+// Funções auxiliares de matemática (inline para performance)
+static inline int max_int(int a, int b) { return a > b ? a : b; }
+static inline int min_int(int a, int b) { return a < b ? a : b; }
+static inline double max_double(double a, double b) { return a > b ? a : b; }
+static inline double min_double(double a, double b) { return a < b ? a : b; }
+
 double rand_uniform(double min, double max);
 double fmod_positive(double x, double y);
-int max_int(int a, int b);
-int min_int(int a, int b);
-double max_double(double a, double b);
-double min_double(double a, double b);
 
 // Funções de cálculo de estados
 ResultadoEstadoDiscreto calc_estados_discretos(RobotQLearning* robot, Vector3D erro_bruto);

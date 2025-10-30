@@ -17,9 +17,17 @@ CC = gcc
 # Flags de Compilação
 # -Wall -Wextra -Werror: Segurança e qualidade
 # -std=c99: compatível com o código
-# -O2: otimização moderada
-# -g: informações de debug
-CFLAGS = -Wall -Wextra -Werror -std=c99 -O2 -g
+# -O3: otimização agressiva
+# -march=native: otimiza para a CPU local
+# -ffast-math: otimizações matemáticas agressivas
+# -funroll-loops: desenrola loops pequenos
+# -flto: Link-Time Optimization
+CFLAGS = -Wall -Wextra -Werror -std=c99 -O3 -march=native -ffast-math -funroll-loops -flto
+
+# Flags de Compilação para Debug (use 'make DEBUG=1' para ativar)
+ifdef DEBUG
+CFLAGS = -Wall -Wextra -Werror -std=c99 -O0 -g
+endif
 
 # Flags de Linkagem
 LDFLAGS = -lm
@@ -32,7 +40,7 @@ all: $(TARGET)
 # Linkagem Final
 $(TARGET): $(OBJS)
 	@echo "Linking $(TARGET)"
-	$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET) $(LDFLAGS)
 
 # ------------------------------------------------------------------------------
 # Compilação Genérica (.c → .o)
@@ -52,6 +60,13 @@ run: $(TARGET)
 	@echo "Running $(TARGET)..."
 	./$(TARGET)
 
+help:
+	@echo "Targets disponíveis:"
+	@echo "  make          - Compila com otimizações máximas (-O3, -march=native, -flto)"
+	@echo "  make DEBUG=1  - Compila em modo debug (-O0, -g)"
+	@echo "  make run      - Compila e executa"
+	@echo "  make clean    - Remove arquivos gerados"
+
 # ------------------------------------------------------------------------------
 # Dependências Explícitas
 # ------------------------------------------------------------------------------
@@ -61,4 +76,4 @@ main.o: robot.h
 # ------------------------------------------------------------------------------
 # Pseudo-targets
 # ------------------------------------------------------------------------------
-.PHONY: all clean run
+.PHONY: all clean run help

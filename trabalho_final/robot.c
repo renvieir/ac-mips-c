@@ -1,30 +1,29 @@
 #include "robot.h"
 #include <string.h>
+#include <stdint.h>
+
+// Fast random number generator state (XORShift)
+static uint32_t xorshift_state = 0;
+
+static inline uint32_t xorshift32() {
+    xorshift_state ^= xorshift_state << 13;
+    xorshift_state ^= xorshift_state >> 17;
+    xorshift_state ^= xorshift_state << 5;
+    return xorshift_state;
+}
 
 // Funções auxiliares de matemática
 double rand_uniform(double min, double max) {
-    return min + (max - min) * ((double)rand() / RAND_MAX);
+    // Usa XORShift para geração mais rápida de números aleatórios
+    if (xorshift_state == 0) {
+        xorshift_state = (uint32_t)time(NULL);
+    }
+    return min + (max - min) * (xorshift32() / (double)UINT32_MAX);
 }
 
 double fmod_positive(double x, double y) {
     double result = fmod(x, y);
     return result < 0 ? result + y : result;
-}
-
-int max_int(int a, int b) {
-    return a > b ? a : b;
-}
-
-int min_int(int a, int b) {
-    return a < b ? a : b;
-}
-
-double max_double(double a, double b) {
-    return a > b ? a : b;
-}
-
-double min_double(double a, double b) {
-    return a < b ? a : b;
 }
 
 // Aloca a tabela Q (array 3D)
@@ -130,35 +129,39 @@ void destruir_robot(RobotQLearning* robot) {
 ResultadoEstadoDiscreto calc_estados_discretos(RobotQLearning* robot, Vector3D erro_bruto) {
     ResultadoEstadoDiscreto resultado;
 
-    // Distância ao objetivo
-    resultado.dist_alvo = sqrt(erro_bruto.x * erro_bruto.x + erro_bruto.y * erro_bruto.y);
+    // Distância ao objetivo usando hipot (mais rápido e preciso)
+    resultado.dist_alvo = hypot(erro_bruto.x, erro_bruto.y);
 
     // Evita divisão por zero
     if (resultado.dist_alvo < 0.01) {
         resultado.erros_norm.x = 0;
         resultado.erros_norm.y = 0;
     } else {
-        resultado.erros_norm.x = erro_bruto.x / resultado.dist_alvo;
-        resultado.erros_norm.y = erro_bruto.y / resultado.dist_alvo;
+        double inv_dist = 1.0 / resultado.dist_alvo;  // Uma divisão em vez de duas
+        resultado.erros_norm.x = erro_bruto.x * inv_dist;
+        resultado.erros_norm.y = erro_bruto.y * inv_dist;
     }
 
-    // Discretização dos erros normalizados
-    int idx_x = 1;
-    int idx_y = 1;
-
-    for (int i = 0; i < NUM_ESTADOS_X; i++) {
+    // Discretização otimizada: busca reversa (geralmente mais rápida para valores próximos do fim)
+    int idx_x = NUM_ESTADOS_X;
+    for (int i = NUM_ESTADOS_X - 1; i >= 0; i--) {
         if (resultado.erros_norm.x > robot->faixas_x[i]) {
-            idx_x = i + 2; // +1 para contar, +1 para 1-based
+            idx_x = i + 2;
+            break;
         }
     }
+    if (idx_x > NUM_ESTADOS_X) idx_x = 1;
 
-    for (int i = 0; i < NUM_ESTADOS_Y; i++) {
+    int idx_y = NUM_ESTADOS_Y;
+    for (int i = NUM_ESTADOS_Y - 1; i >= 0; i--) {
         if (resultado.erros_norm.y > robot->faixas_y[i]) {
             idx_y = i + 2;
+            break;
         }
     }
+    if (idx_y > NUM_ESTADOS_Y) idx_y = 1;
 
-    // Garante que os índices estejam dentro dos limites
+    // Clamp aos limites
     idx_x = max_int(1, min_int(idx_x, robot->num_estados_x));
     idx_y = max_int(1, min_int(idx_y, robot->num_estados_y));
 
@@ -226,18 +229,26 @@ Vector3D calcular_erro_inicial(RobotQLearning* robot, Vector2D destino, Vector3D
 Vector3D simular_acao_caso1(RobotQLearning* robot, Vector3D Er, Vector2D U) {
     Vector3D Er_novo = Er;
 
-    // Integração numérica
+    // Pré-calcula valores constantes no loop
+    const double h_Ux = robot->h * (-U.x);
+    const double h_Uy = robot->h * U.y;
+    const double h_Uy_d = h_Uy * robot->d;
+    const double two_pi = 2.0 * PI;
+
+    // Integração numérica otimizada
     for (int i = 0; i < 100; i++) {
         // Modelo cinemático (equação 39 do PDF)
-        // B = [[-1, Er.y], [0, -(Er.x + d)], [0, 1]]
-        // Er_pt = B @ U
-        double Er_pt_x = -U.x + Er_novo.y * U.y;
-        double Er_pt_y = -(Er_novo.x + robot->d) * U.y;
-        double Er_pt_theta = U.y;
+        double Er_pt_x = h_Ux + Er_novo.y * h_Uy;
+        double Er_pt_y = -Er_novo.x * h_Uy - h_Uy_d;
 
-        Er_novo.x = Er_novo.x + robot->h * Er_pt_x;
-        Er_novo.y = Er_novo.y + robot->h * Er_pt_y;
-        Er_novo.theta = fmod_positive(Er_novo.theta + robot->h * Er_pt_theta, 2 * PI);
+        Er_novo.x += Er_pt_x;
+        Er_novo.y += Er_pt_y;
+        Er_novo.theta += h_Uy;
+
+        // Normaliza theta apenas no final para evitar fmod repetido
+        if (i == 99) {
+            Er_novo.theta = fmod_positive(Er_novo.theta, two_pi);
+        }
     }
 
     return Er_novo;
@@ -248,11 +259,24 @@ void simular_acao_caso2(RobotQLearning* robot, Vector3D* pose, Vector2D destino,
                         Vector2D U, Vector3D* Er_novo) {
     Vector3D pose_novo = *pose;
 
-    // Integração da pose do robô
+    // Pré-calcula valores constantes
+    const double h_Ux = robot->h * U.x;
+    const double h_Uy = robot->h * U.y;
+    const double two_pi = 2.0 * PI;
+
+    // Integração da pose do robô - otimizada
     for (int i = 0; i < 100; i++) {
-        pose_novo.x = pose_novo.x + robot->h * U.x * cos(pose_novo.theta);
-        pose_novo.y = pose_novo.y + robot->h * U.x * sin(pose_novo.theta);
-        pose_novo.theta = fmod_positive(pose_novo.theta + robot->h * U.y, 2 * PI);
+        double cos_theta = cos(pose_novo.theta);
+        double sin_theta = sin(pose_novo.theta);
+
+        pose_novo.x += h_Ux * cos_theta;
+        pose_novo.y += h_Ux * sin_theta;
+        pose_novo.theta += h_Uy;
+
+        // Normaliza theta apenas no final
+        if (i == 99) {
+            pose_novo.theta = fmod_positive(pose_novo.theta, two_pi);
+        }
     }
 
     // Atualiza a pose
@@ -291,19 +315,22 @@ void atualizar_tabela_q(RobotQLearning* robot, EstadoDiscreto estado, int acao,
     int idx_y_prox = estado_proximo.idx_y - 1;
     int acao_idx = acao - 1;
 
-    double Q_s_a = robot->Q_table[idx_x][idx_y][acao_idx];
+    // Usa ponteiros para evitar indexação repetida
+    double* Q_atual = robot->Q_table[idx_x][idx_y];
+    double* Q_proximo = robot->Q_table[idx_x_prox][idx_y_prox];
 
-    // Encontra o Q máximo do próximo estado
-    double Q_max_proximo = robot->Q_table[idx_x_prox][idx_y_prox][0];
+    double Q_s_a = Q_atual[acao_idx];
+
+    // Encontra o Q máximo do próximo estado (otimizado)
+    double Q_max_proximo = Q_proximo[0];
     for (int a = 1; a < robot->num_acoes; a++) {
-        if (robot->Q_table[idx_x_prox][idx_y_prox][a] > Q_max_proximo) {
-            Q_max_proximo = robot->Q_table[idx_x_prox][idx_y_prox][a];
+        if (Q_proximo[a] > Q_max_proximo) {
+            Q_max_proximo = Q_proximo[a];
         }
     }
 
     // Atualiza a tabela Q
-    robot->Q_table[idx_x][idx_y][acao_idx] = Q_s_a + robot->alfa *
-        (recompensa + robot->gama * Q_max_proximo - Q_s_a);
+    Q_atual[acao_idx] = Q_s_a + robot->alfa * (recompensa + robot->gama * Q_max_proximo - Q_s_a);
 }
 
 // Executa o treinamento do Q-Learning
