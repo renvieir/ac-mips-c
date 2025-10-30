@@ -3,4 +3,4 @@
 *.dat
 *.npz
 *.o
-.robot
+robot
